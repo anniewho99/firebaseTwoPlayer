@@ -15,6 +15,7 @@ Possible extensions:
 */
 
 // The following code uses the modular and functional approach of Firebase version 9
+//force a rebuild
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.21.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.21.0/firebase-auth.js"; // "./firebase/firebase-auth.js"; 
 import {
