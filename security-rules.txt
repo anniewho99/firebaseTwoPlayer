@@ -8,8 +8,22 @@ For example, any logged in player could currently delete all the coins in the ga
 ```
 {
   "rules": {
-    ".read": "true",
-    ".write": "true"
+    "players": {
+      ".read": "auth != null",  // Let authenticated users read player data
+      ".write": "auth != null && (!data.exists() || auth.uid === $uid)",  // Players can write their own data
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "coins": {
+        ".write": "auth != null"
+    }
+    "lastPlayerOrder": {
+        ".write": "auth != null"
+    }
+    "doors": {
+        ".write": "auth != null"
+    }
   }
 }
 ```

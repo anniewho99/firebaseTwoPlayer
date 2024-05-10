@@ -25,28 +25,26 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.21.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC_zs1VBtJ2Q1zqJvJ-_I6VLYaDNpBk86E",
-  authDomain: "multiplayer-demo-2.firebaseapp.com",
-  projectId: "multiplayer-demo-2",
-  storageBucket: "multiplayer-demo-2.appspot.com",
-  messagingSenderId: "887792846724",
-  appId: "1:887792846724:web:afd6d693ba0aec62507fd1"
+  apiKey: "AIzaSyB0zBbR6ljy6GmmBPtqJFuG3b6t3FGG_P0",
+  authDomain: "multiplayer-debug-780ad.firebaseapp.com",
+  projectId: "multiplayer-debug-780ad",
+  storageBucket: "multiplayer-debug-780ad.appspot.com",
+  messagingSenderId: "1058404562799",
+  appId: "1:1058404562799:web:25e8af3489564c5dcbda9a"
 };
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const database = getDatabase(app);
-
 
 let doorPlayerOneCoords = [];
 let doorPlayerTwoCoords = [];
 
 let doorPlayerOneadjusted = [];
 let doorPlayerTwodjusted = [];
-let allDoors = [];
+//let allDoors = [];
 
-let activePlayerCount = 0;
+//let activePlayerCount = 0;
 
 let isInitialLoad = true;  // Flag to check if we're loading initial data
 
@@ -64,6 +62,22 @@ const GRIDS = [
   {start: [11, 3], end: [13, 5]},
   {start: [11, 11], end: [13, 13]}
 ];  
+
+const GRIDSWITHID = [
+  {id: "grid1", start: [3, 3], end: [5, 5], occupiedBy: null},
+  {id: "grid2", start: [3, 11], end: [5, 13], occupiedBy: null},
+  {id: "grid3", start: [11, 3], end: [13, 5], occupiedBy: null},
+  {id: "grid4", start: [11, 11], end: [13, 13], occupiedBy: null}
+];
+
+function initializeGridsInFirebase() {
+  const gridsRef = ref(database, 'grids');
+  GRIDSWITHID.forEach(grid => {
+    set(ref(database, `grids/${grid.id}`), { occupiedBy: null });
+  });
+}
+
+
 
 const DIRECTIONS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 
@@ -239,6 +253,12 @@ function shuffle(array) {
 }
 
 function calculateDoors() {
+  let doorPlayerOneCoords = [];
+  let doorPlayerTwoCoords = [];
+
+  let doorPlayerOneadjusted = [];
+  let doorPlayerTwodjusted = [];
+  let allDoors = []; 
   for (let grid of GRIDS) {
       const [startX, startY] = grid.start;
       const [endX, endY] = grid.end;
@@ -263,10 +283,29 @@ function calculateDoors() {
       console.log(doorPlayerOneadjusted);
       console.log(doorPlayerTwodjusted);
   }
+
+  return {
+    doorPlayerOneCoords,
+    doorPlayerTwoCoords,
+    doorPlayerOneadjusted,
+    doorPlayerTwodjusted,
+    allDoors,
+};
 }
 
 function crossesDoor(start, end, playerID) {
   let validAdjustedDoors;
+  const doorsRef = ref(database, 'doors');
+  get(doorsRef).then((snapshot) => {
+    if (snapshot.exists()) {
+        const doorsData = snapshot.val();
+        doorPlayerOneadjusted = doorsData.doorPlayerOneadjusted;
+        doorPlayerTwodjusted = doorsData.doorPlayerTwodjusted;
+        console.log("Doors retrieved from Firebase:", doorsData);
+    }
+}).catch(error => {
+    console.error("Error retrieving doors data:", error);
+});
   if (playerID === 0) {
       validAdjustedDoors = doorPlayerOneadjusted;
   } else if (playerID === 1) {
@@ -282,18 +321,74 @@ function crossesDoor(start, end, playerID) {
       startExists[0] = startExists[0] === 5 ? 6 : startExists[0];
       startExists[0] = startExists[0] === 13 ? 14 : startExists[0];
       //let door = { coord: startExists, orientation: "V" };
+      fetchAndDrawDoors();
       return startExists;
   } else if (endExists) {
       //console.log("Entering the end door they own");
       endExists[0] = endExists[0] === 5 ? 6 : endExists[0];
       endExists[0] = endExists[0] === 13 ? 14 : endExists[0];
       //let door = { coord: endExists, orientation: "V" };
+      fetchAndDrawDoors();
       return endExists;
   } else {
       //console.log('Entering a door they don\'t own');
       return false;
   }    
   
+}
+
+function fetchAndDrawDoors() {
+
+  const playersRef = ref(database, 'players');
+    get(playersRef).then((snapshot) => {
+        if (snapshot.exists()) {
+            const players = snapshot.val();
+            const playerDoors = [];
+
+            Object.keys(players).forEach(playerId => {
+                const player = players[playerId];
+                let doorCoords = [];
+
+                // Determine which door coordinates to use based on player order
+                if (player.order === 0) {
+                    doorCoords = doorPlayerOneadjusted;
+                } else if (player.order === 1) {
+                    doorCoords = doorPlayerTwodjusted;
+                }
+
+                // Prepare door data for drawing
+                playerDoors.push({
+                    coords: doorCoords,
+                    color: player.color // Fetching color dynamically
+                });
+            });
+
+            // Call the function to draw doors with the dynamically fetched data
+            drawDoors(playerDoors);
+        } else {
+            console.log("No player data available.");
+        }
+    }).catch(error => {
+        console.error("Error fetching player data:", error);
+    });
+}
+
+function drawDoors(playerDoors) {
+    const gameContainer = document.querySelector(".game-container");
+    const gridSize = 16; // Grid size
+
+    playerDoors.forEach(player => {
+        player.coords.forEach(coord => {
+            const doorElement = document.createElement('div');
+            doorElement.style.position = 'absolute';
+            doorElement.style.width = '3px';
+            doorElement.style.height = '16px'; // Height adjusted for vertical doors
+            doorElement.style.backgroundColor = player.color;
+            doorElement.style.left = `${(coord[0] - 1) * gridSize}px`;
+            doorElement.style.top = `${ (coord[1] - 1) * gridSize}px`;
+            gameContainer.appendChild(doorElement);
+        });
+    });
 }
 
 function isMoveAllowed(currentPosition, nextPosition, playerIndex) {
@@ -327,17 +422,17 @@ function displayMaxCapacityMessage() {
   alert("Sorry, the current game has reached maximum capacity. Please try again later.");
 }
 
-function isOccupied(x,y) {
+// function isOccupied(x,y) {
 
-  const blockedNextSpace = mapData.blockedSpaces[getKeyString(x, y)];
-  return (
-    blockedNextSpace ||
-    x > mapData.maxX ||
-    x < mapData.minX ||
-    y > mapData.maxY ||
-    y < mapData.minY
-  )
-}
+//   const blockedNextSpace = mapData.blockedSpaces[getKeyString(x, y)];
+//   return (
+//     blockedNextSpace ||
+//     x > mapData.maxX ||
+//     x < mapData.minX ||
+//     y > mapData.maxY ||
+//     y < mapData.minY
+//   )
+// }
 
 function getRandomSafeSpot() {
   //We don't look things up by key here, so just return an x/y
@@ -367,8 +462,6 @@ function getRandomSafeSpot() {
     { x: 11, y: 4 },
   ]);
 }
-
-calculateDoors();
 
 (function () {
 
@@ -406,6 +499,42 @@ calculateDoors();
     }, randomFromArray(coinTimeouts));
   }
 
+  function placeCoinsForPlayer(playerId, playerColor) {
+    const gridsRef = ref(database, 'grids');
+    get(gridsRef).then(snapshot => {
+      if (snapshot.exists()) {
+        let availableGrids = [];
+        snapshot.forEach(child => {
+          let grid = child.val();
+          let gridId = child.key;
+          if (!grid.occupiedBy) {
+            availableGrids.push({...GRIDSWITHID.find(g => g.id === gridId), ...grid});
+          }
+        });
+  
+        if (availableGrids.length > 0) {
+          let selectedGrid = randomFromArray(availableGrids);
+          // Update the grid as occupied by the current player
+          update(ref(database, `grids/${selectedGrid.id}`), { occupiedBy: playerId });
+          // Place coins in the selected grid
+          for (let i = 0; i < 3; i++) {
+            const x = getRandomInt(selectedGrid.start[0], selectedGrid.end[0]);
+            const y = getRandomInt(selectedGrid.start[1], selectedGrid.end[1]);
+            const coinRef = ref(database, `coins/${getKeyString(x, y)}`);
+            set(coinRef, {
+              x,
+              y,
+              color: playerColor
+            });
+          }
+        }
+      }
+    }).catch(error => {
+      console.error("Error accessing grids:", error);
+    });
+  }
+  
+
   function attemptGrabCoin(x, y) {
     const key = getKeyString(x, y);
     /*
@@ -438,7 +567,7 @@ calculateDoors();
     const index = players[playerId].order; 
 
     // Check if the new move is allowed
-    if (!isOccupied(newX, newY) && isMoveAllowed([oldX, oldY], [newX, newY], index)) {
+    if (isMoveAllowed([oldX, oldY], [newX, newY], index)) {
         // Move to the next space
         players[playerId].oldX = oldX;
         players[playerId].oldY = oldY;
@@ -461,6 +590,32 @@ calculateDoors();
     } else {
         console.log("Move not allowed.");
     }
+}
+
+function initGameDoors() {
+  const doorsRef = ref(database, 'doors');
+  get(doorsRef).then((snapshot) => {
+        if (snapshot.exists()) {
+            // Doors already calculated, retrieve and use them
+            const doorsData = snapshot.val();
+            doorPlayerOneCoords = doorsData.doorPlayerOneCoords;
+            doorPlayerTwoCoords = doorsData.doorPlayerTwoCoords;
+            doorPlayerOneadjusted = doorsData.doorPlayerOneadjusted;
+            doorPlayerTwodjusted = doorsData.doorPlayerTwodjusted;
+            console.log("Doors retrieved from Firebase:", doorsData);
+        } else {
+            // Doors not calculated, calculate and store them
+            const doorsData = calculateDoors();
+            set(doorsRef, doorsData).then(() => {
+                console.log("Doors calculated and stored in Firebase");
+                console.log(doorsData);
+            }).catch(error => {
+                console.error("Error storing doors in Firebase:", error);
+            });
+        }
+    }).catch(error => {
+        console.error("Error retrieving doors from Firebase:", error);
+    });
 }
 
 
@@ -515,7 +670,7 @@ calculateDoors();
     onChildAdded(allPlayersRef, (snapshot) => {
       //Fires whenever a new node is added the tree
 
-      activePlayerCount++;
+      //activePlayerCount++;
 
       // console.log("current number of player");
       // console.log(activePlayerCount);
@@ -527,7 +682,7 @@ calculateDoors();
       // }
 
       const addedPlayer = snapshot.val();
-      addedPlayer.order = activePlayerCount;
+      //addedPlayer.order = activePlayerCount;
 
       const characterElement = document.createElement("div");
       characterElement.classList.add("Character", "grid-cell");
@@ -564,15 +719,29 @@ calculateDoors();
     //Remove character DOM element after they leave
     //allPlayersRef.on("child_removed", (snapshot) => {
     onChildRemoved(allPlayersRef, (snapshot) => {  
-      const removedKey = snapshot.val().id;
-      activePlayerCount--;
-      gameContainer.removeChild(playerElements[removedKey]);
-      delete playerElements[removedKey];
+    const removedPlayer = snapshot.val();
+    const removedPlayerId = removedPlayer.id;
+    const removedPlayerOrder = removedPlayer.order === 0 ? 1 : 0;  // Assuming 'order' is stored with the player data
 
-      // Remove player from local game state
-      let firstMatchingKey = getFirstKeyForValue(mapData.blockedSpaces, removedKey);
-      delete mapData.blockedSpaces[firstMatchingKey];
-    })
+    // Update lastPlayerOrder to the order of the removed player
+    const lastOrderRef = ref(database, 'lastPlayerOrder');
+    set(lastOrderRef, removedPlayerOrder).then(() => {
+        console.log(`Updated lastPlayerOrder to ${removedPlayerOrder} after player removal.`);
+    }).catch(error => {
+        console.error("Error updating lastPlayerOrder:", error);
+    });
+
+    // Remove the player's HTML element and delete from local game state
+    gameContainer.removeChild(playerElements[removedPlayerId]);
+    delete playerElements[removedPlayerId];
+
+    // Remove player from local game state
+    let firstMatchingKey = getFirstKeyForValue(mapData.blockedSpaces, removedPlayerId);
+    if (firstMatchingKey) {
+        delete mapData.blockedSpaces[firstMatchingKey];
+    }
+  });
+
 
 
     //New - not in the video!
@@ -644,53 +813,62 @@ calculateDoors();
   }
 
   onAuthStateChanged(auth, (user) => {
+    console.log(user);
     if (user) {
-      // User is logged in
-      playerId = user.uid;
-      playerRef = ref(database, `players/${playerId}`);   
-      const playerCountRef = ref(database, 'players/count');
+        // User is logged in
+        playerId = user.uid;
+        playerRef = ref(database, `players/${playerId}`);
+        const lastOrderRef = ref(database, 'lastPlayerOrder');
 
-      // Fetch the current count and increment it manually
-      get(playerCountRef).then((snapshot) => {
-          let currentCount = snapshot.exists() ? snapshot.val() : 0;
-          let newCount = currentCount + 1;  // Manually increment
+        // Check the last player order and decide the current order
+        get(lastOrderRef).then(lastOrderSnapshot => {
+            let currentOrder = 0; // Default to 0 if lastPlayerOrder doesn't exist
+            if (lastOrderSnapshot.exists()) {
+                // Toggle the order based on the last player's order
+                currentOrder = lastOrderSnapshot.val() === 0 ? 1 : 0;
+            }
 
-          // Update the player count in Firebase
-          set(playerCountRef, newCount).then(() => {
-              const name = createName();
-              playerNameInput.value = name;
-              const {x, y} = getRandomSafeSpot();
+            // Set up the new player with the determined order
+            const name = createName(); // Assume this function generates a random name
+            playerNameInput.value = name;
+            const {x, y} = getRandomSafeSpot(); // Assume this function determines positions safely
 
-              // Set the player data with the incremented order
-              set(playerRef, {
-                  id: playerId,
-                  name,
-                  direction: "right",
-                  color: randomFromArray(playerColors),
-                  oldX: x,
-                  oldY: y,
-                  x,
-                  y,
-                  coins: 0,
-                  order: newCount,
-              });
+            set(playerRef, {
+                id: playerId,
+                name,
+                direction: "right",
+                color: randomFromArray(playerColors),
+                oldX: x,
+                oldY: y,
+                x,
+                y,
+                coins: 0,
+                order: currentOrder,
+            }).then(() => {
+                console.log(`Player ${playerId} added with order ${currentOrder}.`);
+                // Update lastPlayerOrder in Firebase
+                set(lastOrderRef, currentOrder);
+            }).catch(error => {
+                console.error("Error setting player data:", error);
+            });
 
-              // Remove player from Firebase when they disconnect
-              onDisconnect(playerRef).remove();
+            // Remove player from Firebase when they disconnect
+            onDisconnect(playerRef).remove();
 
-              // Begin the game now that we are signed in
-              initGame();
-          }).catch(error => {
-              console.error("Error updating player count:", error);
-          });
-      }).catch(error => {
-          console.error("Error fetching player count:", error);
-      });
+            // Begin the game
+            initGame();
+            initGameDoors(); 
+            fetchAndDrawDoors();// Assume this function initializes the game environment
+        }).catch(error => {
+            console.error("Error retrieving last player order:", error);
+        });
     } else {
-      // User is logged out
-      // Handle logout scenario if needed
+        // User is logged out
+        console.log("User is logged out.");
+        // Handle logout scenario if needed
     }
-  });
+});
+
 
   signInAnonymously(auth)
   .then((userCredential) => {
